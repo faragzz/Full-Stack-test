@@ -123,9 +123,16 @@ Example:
 
 ```env
 NODE_ENV=development
-PORT=3000
+
 DATABASE_URL=mongodb://admin:secret@localhost:27017/full_stack_test?authSource=admin
-JWT_SECRET=replace-with-a-long-random-secret
+
+JWT_ACCESS_SECRET=b69b515827e28b9a3f298f66be7cb143c4c9e37d37230b7c05e9af2b8ed806c2
+JWT_REFRESH_SECRET=ba5ce66de8653f20d2cf5cbfedea11504b0714eb647bd38d21d05ade47c5450d
+JWT_ACCESS_EXPIRES_IN=900
+JWT_REFRESH_EXPIRES_DAYS=30
+
+COOKIE_ACCESS_TOKEN_MAX_AGE_MS=900000        # 15 minutes
+COOKIE_REFRESH_TOKEN_MAX_AGE_MS=604800000    # 7 days
 ```
 
 Do not commit real secrets to the repository.
