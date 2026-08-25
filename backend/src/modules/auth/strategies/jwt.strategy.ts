@@ -5,10 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from '../../users/schema/user.schema';
 import { Model } from 'mongoose';
-
-interface JwtPayload {
-  sub: string;
-}
+import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -33,6 +30,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
-    return { userId: payload.sub };
+    return {
+      id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+    };
   }
 }

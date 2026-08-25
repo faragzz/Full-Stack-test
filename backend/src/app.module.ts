@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -12,7 +13,12 @@ import { UsersModule } from './modules/users/users.module';
     }),
 
     MongooseModule.forRoot(process.env.DATABASE_URL!),
-
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 20,
+      },
+    ]),
     AuthModule,
     UsersModule,
   ],
