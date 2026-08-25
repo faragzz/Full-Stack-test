@@ -22,7 +22,7 @@ async function bootstrap() {
     origin: 'http://localhost:5173',
     credentials: true,
   });
-
+  // Swagger is currently enabled for development, but it should be disabled in production
   const config = new DocumentBuilder()
     .setTitle('Full-Stack Test API')
     .setDescription('API documentation for the Full-Stack Test Task')
