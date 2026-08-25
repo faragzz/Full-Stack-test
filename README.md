@@ -54,8 +54,8 @@ The application provides user registration, login, session authentication, and a
 - Environment-based configuration
 - Dockerized frontend, backend, and MongoDB services
 - TypeScript throughout the application
-
-The original assessment required a React or Vue authentication module, TypeScript, NestJS, MongoDB, sign-up/sign-in endpoints, at least one protected endpoint, and repository documentation. fileciteturn0file0L5-L13 fileciteturn0file0L31-L39
+fileciteturn0file0L5-
+The original assessment required a React or Vue authentication module, TypeScript, NestJS, MongoDB, sign-up/sign-in endpoints, at least one protected endpoint, and repository documentation.
 
 ## Project Structure
 
