@@ -58,7 +58,11 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-export const SignupForm = () => {
+type SignupFormProps = {
+  onSuccess: () => void;
+};
+
+export const SignupForm = ({ onSuccess }: SignupFormProps) => {
   const { mutate: signup, isLoading, error } = useSignup();
 
   const [showPassword, setShowPassword] = useState(false);
@@ -74,6 +78,7 @@ export const SignupForm = () => {
 
   const onSubmit = async (data: SignupFormData) => {
     await signup(data);
+    onSuccess();
   };
 
   return (

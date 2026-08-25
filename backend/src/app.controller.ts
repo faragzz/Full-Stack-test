@@ -4,7 +4,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CurrentUser } from './common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from './common/types/express';
 
-@Controller('me')
+@Controller('greet')
 export class AppController {
   constructor(private readonly appService: AppService) {}
 

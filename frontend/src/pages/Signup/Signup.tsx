@@ -1,6 +1,11 @@
+import { useNavigate } from "react-router-dom";
 import { SignupForm } from "../../components/auth/SignupForm";
 
 export const Signup = () => {
+  const navigate = useNavigate();
+  const handleSuccess = () => {
+    navigate("/signin");
+  };
   return (
     <div className="app-background">
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 py-12">
@@ -19,7 +24,7 @@ export const Signup = () => {
             </p>
           </div>
 
-          <SignupForm />
+          <SignupForm onSuccess={handleSuccess} />
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}

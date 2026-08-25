@@ -1,6 +1,12 @@
 import { SigninForm } from "../../components/auth/SigninForm";
+import { useNavigate } from "react-router-dom";
 
 export const Signin = () => {
+  const navigate = useNavigate();
+  const handleSuccess = () => {
+    navigate("/Home");
+  };
+
   return (
     <div className="app-background">
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 py-12">
@@ -19,7 +25,7 @@ export const Signin = () => {
             </p>
           </div>
 
-          <SigninForm />
+          <SigninForm onSuccess={handleSuccess} />
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Don't have an account?{" "}

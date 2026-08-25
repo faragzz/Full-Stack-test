@@ -56,8 +56,11 @@ const EyeOffIcon = () => (
     />
   </svg>
 );
+type SigninFormProps = {
+  onSuccess: () => void;
+};
 
-export const SigninForm = () => {
+export const SigninForm = ({ onSuccess }: SigninFormProps) => {
   const { mutate: signin, isLoading, error } = useSignin();
 
   const [showPassword, setShowPassword] = useState(false);
@@ -72,6 +75,7 @@ export const SigninForm = () => {
 
   const onSubmit = async (data: SigninFormData) => {
     await signin(data);
+    onSuccess();
   };
 
   return (

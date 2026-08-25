@@ -17,3 +17,11 @@ export type AuthResponse = {
 export type LogoutResponse = {
   success: boolean;
 };
+
+export type GreetingResponse = string;
+
+export type MeResponse = {
+  id: string;
+  name: string;
+  email: string;
+};

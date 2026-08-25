@@ -5,6 +5,7 @@ import {
   RefreshToken,
   RefreshTokenSchema,
 } from './schema/refresh-token.schema';
+import { UsersController } from './users.controller';
 
 @Module({
   imports: [
@@ -14,5 +15,6 @@ import {
     ]),
   ],
   exports: [MongooseModule],
+  controllers: [UsersController],
 })
 export class UsersModule {}
