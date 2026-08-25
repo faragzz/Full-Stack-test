@@ -9,77 +9,116 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
+
 import { User, UserDocument } from '../users/schema/user.schema';
 import {
   RefreshToken,
   RefreshTokenDocument,
 } from '../users/schema/refresh-token.schema';
+
 import { SignupDto } from './dto/signup.dto';
 import { SigninDto } from './dto/signin.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
-/**
- * Shape returned to the client after any successful auth operation
- * (signup, signin, refresh).
- */
 export interface TokenPair {
-  /** Short-lived JWT sent as `Authorization: Bearer <accessToken>` on subsequent requests. */
   accessToken: string;
-  /** Long-lived opaque secret used only to obtain a new token pair via `/auth/refresh`. */
   refreshToken: string;
+}
+
+type MongoDuplicateKeyError = {
+  code: 11000;
+};
+
+/**
+ * Determines whether an unknown error is a MongoDB duplicate-key error.
+ *
+ * @param error - The unknown error thrown by MongoDB.
+ * @returns True when the error represents a duplicate-key violation.
+ */
+function isMongoDuplicateKeyError(
+  error: unknown,
+): error is MongoDuplicateKeyError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if (!('code' in error)) {
+    return false;
+  }
+
+  return error.code === 11000;
 }
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+
     @InjectModel(RefreshToken.name)
-    private refreshTokenModel: Model<RefreshTokenDocument>,
-    private jwtService: JwtService,
-    private config: ConfigService,
+    private readonly refreshTokenModel: Model<RefreshTokenDocument>,
+
+    private readonly jwtService: JwtService,
+
+    private readonly config: ConfigService,
   ) {}
 
   /**
-   * Registers a new user and immediately logs them in.
+   * Creates a new user account.
    *
-   * @param dto - Validated signup payload containing email, name, and plaintext password.
-   * @returns A fresh access/refresh token pair for the newly created user.
-   * @throws {ConflictException} If an account with this email already exists.
+   * Passwords are hashed before being persisted. Authentication tokens
+   * are intentionally not generated during signup.
+   *
+   * @param dto - Validated signup data containing email, name, and password.
+   * @returns A promise that resolves when the account has been created.
+   * @throws ConflictException When the email is already registered.
    */
-  async signup(dto: SignupDto): Promise<TokenPair> {
-    const existing = await this.userModel.findOne({ email: dto.email });
+  async signup(dto: SignupDto): Promise<void> {
+    const email = this.normalizeEmail(dto.email);
+
+    const existing = await this.userModel.findOne({ email });
+
     if (existing) {
       throw new ConflictException('An account with this email already exists');
     }
 
     const hashedPassword = await argon2.hash(dto.password);
 
-    const user = await this.userModel.create({
-      email: dto.email,
-      name: dto.name,
-      password: hashedPassword,
-    });
+    try {
+      await this.userModel.create({
+        email,
+        name: dto.name.trim(),
+        password: hashedPassword,
+      });
+    } catch (error: unknown) {
+      if (isMongoDuplicateKeyError(error)) {
+        throw new ConflictException(
+          'An account with this email already exists',
+        );
+      }
 
-    return this.issueTokens(user._id.toString(), user.email);
+      throw error;
+    }
   }
 
   /**
-   * Verifies a user's credentials and issues a new token pair on success.
+   * Authenticates a user using their email and password.
    *
-   * @param dto - Validated signin payload containing email and plaintext password.
-   * @returns A fresh access/refresh token pair for the authenticated user.
-   * @throws {UnauthorizedException} If the email doesn't exist or the password doesn't match.
+   * @param dto - Validated signin credentials.
+   * @returns A newly generated access and refresh token pair.
+   * @throws UnauthorizedException When the credentials are invalid.
    */
   async signin(dto: SigninDto): Promise<TokenPair> {
-    const user = await this.userModel
-      .findOne({ email: dto.email })
-      .select('+password');
+    const email = this.normalizeEmail(dto.email);
+
+    const user = await this.userModel.findOne({ email }).select('+password');
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
     const passwordMatches = await argon2.verify(user.password, dto.password);
+
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid email or password');
     }
@@ -88,97 +127,140 @@ export class AuthService {
   }
 
   /**
-   * Exchanges a valid, unrevoked, unexpired refresh token for a brand-new
-   * token pair. The presented refresh token is revoked as part of this call
-   * (rotation), so it cannot be reused afterward.
+   * Rotates a refresh token and creates a new authentication session.
    *
-   * @param refreshToken - The raw (unhashed) refresh token presented by the client.
-   * @returns A new access/refresh token pair.
-   * @throws {UnauthorizedException} If the token is invalid, expired, already revoked,
-   *   or its owning user no longer exists.
+   * The existing refresh token is atomically revoked before the new
+   * token pair is created, preventing refresh-token reuse.
+   *
+   * @param refreshToken - Raw refresh token read from the HttpOnly cookie.
+   * @returns A newly generated access and refresh token pair.
+   * @throws UnauthorizedException When the token is invalid, expired,
+   * revoked, or the associated user no longer exists.
    */
   async refresh(refreshToken: string): Promise<TokenPair> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
+    }
+
     const tokenHash = this.hashToken(refreshToken);
 
-    const stored = await this.refreshTokenModel.findOne({
-      tokenHash,
-      revoked: false,
-    });
+    const stored = await this.refreshTokenModel.findOneAndUpdate(
+      {
+        tokenHash,
+        revoked: false,
+        expiresAt: {
+          $gt: new Date(),
+        },
+      },
+      {
+        $set: {
+          revoked: true,
+          revokedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: 'after',
+      },
+    );
 
-    if (!stored || stored.expiresAt < new Date()) {
+    if (!stored) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     const user = await this.userModel.findById(stored.userId);
+
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }
-
-    stored.revoked = true;
-    await stored.save();
 
     return this.issueTokens(user._id.toString(), user.email);
   }
 
   /**
-   * Revokes a single refresh token, effectively logging the client out of
-   * that one session. Other active sessions/devices are unaffected.
+   * Revokes a refresh token and invalidates the current session.
    *
-   * @param refreshToken - The raw (unhashed) refresh token to revoke.
-   * @returns Nothing. Resolves whether or not a matching token was found —
-   *   logging out with an already-invalid token is treated as a no-op success.
+   * @param refreshToken - Raw refresh token read from the HttpOnly cookie.
+   * @returns A promise that resolves after the token has been revoked.
    */
   async logout(refreshToken: string): Promise<void> {
     const tokenHash = this.hashToken(refreshToken);
-    await this.refreshTokenModel.updateOne({ tokenHash }, { revoked: true });
+
+    await this.refreshTokenModel.updateOne(
+      {
+        tokenHash,
+        revoked: false,
+      },
+      {
+        $set: {
+          revoked: true,
+          revokedAt: new Date(),
+        },
+      },
+    );
   }
 
   /**
-   * Issues a brand-new access/refresh token pair for a given user and
-   * persists a hashed record of the refresh token for later verification,
-   * rotation, and revocation.
+   * Generates the authentication token pair for a user.
    *
-   * @param userId - MongoDB ObjectId string of the user to issue tokens for.
-   * @param email - The user's email, embedded in the JWT payload for convenience.
-   * @returns A new access/refresh token pair.
+   * The refresh token is stored only as a SHA-256 hash in MongoDB.
+   *
+   * @param userId - MongoDB identifier of the user.
+   * @param email - User email included in the JWT payload.
+   * @returns A newly generated access and refresh token pair.
    */
   private async issueTokens(userId: string, email: string): Promise<TokenPair> {
-    const payload: JwtPayload = { sub: userId, email };
+    const payload: JwtPayload = {
+      sub: userId,
+      email,
+    };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: this.config.get<string>('JWT_ACCESS_SECRET'),
-      expiresIn: Number(this.config.get<string>('JWT_ACCESS_EXPIRES_IN')),
+      secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      expiresIn: Number(
+        this.config.getOrThrow<string>('JWT_ACCESS_EXPIRES_IN'),
+      ),
     });
 
     const refreshToken = randomBytes(64).toString('hex');
+
     const tokenHash = this.hashToken(refreshToken);
 
     const expiresInDays = Number(
-      this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS') ?? 30,
+      this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '30'),
     );
+
     const expiresAt = new Date();
+
     expiresAt.setDate(expiresAt.getDate() + expiresInDays);
 
     await this.refreshTokenModel.create({
       userId: new Types.ObjectId(userId),
       tokenHash,
       expiresAt,
+      revoked: false,
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+    };
   }
 
   /**
-   * Deterministically hashes a refresh token for storage/lookup.
+   * Normalizes an email address before database operations.
    *
-   * SHA-256 (not argon2) is intentional here: the refresh token is already
-   * a 512-bit random value, not a low-entropy secret like a password, so it
-   * doesn't need a slow, salted KDF — and it *must* be deterministic so we
-   * can look it up by exact match (`findOne({ tokenHash })`) instead of
-   * scanning and comparing every stored token.
+   * @param email - Raw email supplied by the client.
+   * @returns A trimmed lowercase email address.
+   */
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  /**
+   * Creates a SHA-256 hash of a refresh token.
    *
-   * @param token - The raw (unhashed) refresh token.
-   * @returns The hex-encoded SHA-256 digest of the token.
+   * @param token - Raw refresh token.
+   * @returns The hexadecimal SHA-256 token hash.
    */
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');

@@ -6,10 +6,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { validateEnvVariables } from './config/env.schema';
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateEnvVariables,
     }),
 
     MongooseModule.forRoot(process.env.DATABASE_URL!),
