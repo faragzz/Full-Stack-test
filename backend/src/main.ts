@@ -18,10 +18,10 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // For security purposes in production.
-  // app.enableCors({
-  //   origin: 'https://frontend.com',
-  //   credentials: true,
-  // });
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('Full-Stack Test API')
