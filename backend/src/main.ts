@@ -6,7 +6,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = new DocumentBuilder()
     .setTitle('Full-Stack Test API')
-    .setDescription('API documentation for the Full-Stack Test project')
+    .setDescription('API documentation for the Full-Stack Test Task')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
