@@ -285,7 +285,6 @@ The implementation includes several security-focused measures:
 - Passwords are hashed with Argon2.
 - JWT secrets are provided through environment configuration.
 - Request DTOs are validated on the server.
-- Helmet is used for security-related HTTP headers.
 - Throttling/rate limiting is configured to reduce abuse.
 - Authentication is enforced through NestJS guards.
 - Secrets are excluded from source control through environment configuration.
